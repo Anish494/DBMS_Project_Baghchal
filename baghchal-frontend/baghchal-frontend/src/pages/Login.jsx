@@ -33,6 +33,8 @@ const Login = () => {
       }
 
       // ✅ login success
+      // Save user info in localStorage
+      localStorage.setItem("user", JSON.stringify(data.user));
       navigate("/dashboard");
 
     } catch (error) {

@@ -55,7 +55,7 @@ const Rules = () => {
         <Link to="/Dashboard" className="back-button">← Back to Game</Link>
       </div>
 
-      <style jsx>{`
+      <style>{`
         :root {
           --bg-angle: 45deg;
         }

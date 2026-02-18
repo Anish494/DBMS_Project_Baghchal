@@ -1,9 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Animated background gradient
   useEffect(() => {
     let angle = 0;
     const interval = setInterval(() => {
@@ -13,14 +17,42 @@ const Profile = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Temporary static stats (can be replaced with real data later)
-  const stats = {
-    username: "Player One",
-    gamesPlayed: 12,
-    tigerWins: 7,
-    goatWins: 5,
-    goatsCaptured: 28,
-  };
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (!user) {
+      navigate("/"); // redirect if not logged in
+      return;
+    }
+
+    const fetchUserData = async () => {
+      try {
+        // Fetch user info
+        const resUser = await fetch(`http://localhost:8000/api/users/${user.id}/`);
+        const dataUser = await resUser.json();
+        setUserData(dataUser);
+
+        // Fetch statistics (games played, won, lost, best score)
+        const resStats = await fetch(`http://localhost:8000/api/statistics/${user.id}/`);
+        const dataStats = await resStats.json();
+        setStats(dataStats);
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Error fetching profile data:", err);
+        alert("Error loading profile data. Please try again.");
+      }
+    };
+
+    fetchUserData();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div style={{ color: "white", textAlign: "center", marginTop: "50px" }}>
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="profile-page">
@@ -28,28 +60,29 @@ const Profile = () => {
         <h1 className="profile-title">Player Profile 👤</h1>
 
         <div className="profile-info">
-          <p><strong>Username:</strong> {stats.username}</p>
+          <p><strong>Username:</strong> {userData.username}</p>
+          {userData.email && <p><strong>Email:</strong> {userData.email}</p>}
         </div>
 
         <div className="stats-grid">
           <div className="stat-box">
-            <h3>🎮 Games</h3>
-            <p>{stats.gamesPlayed}</p>
+            <h3>🎮 Games Played</h3>
+            <p>{stats.games_played}</p>
           </div>
 
           <div className="stat-box">
-            <h3>🐯 Tiger Wins</h3>
-            <p>{stats.tigerWins}</p>
+            <h3>🏆 Games Won</h3>
+            <p>{stats.games_won}</p>
           </div>
 
           <div className="stat-box">
-            <h3>🐐 Goat Wins</h3>
-            <p>{stats.goatWins}</p>
+            <h3>❌ Games Lost</h3>
+            <p>{stats.games_lost}</p>
           </div>
 
           <div className="stat-box">
-            <h3>☠️ Goats Captured</h3>
-            <p>{stats.goatsCaptured}</p>
+            <h3>⭐ Best Score</h3>
+            <p>{stats.best_score}</p>
           </div>
         </div>
 
@@ -58,17 +91,13 @@ const Profile = () => {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .profile-page {
           min-height: 100vh;
           display: flex;
           justify-content: center;
           align-items: center;
-          background: linear-gradient(
-            var(--bg-angle, 45deg),
-            #1f1c2c,
-            #928dab
-          );
+          background: linear-gradient(var(--bg-angle, 45deg), #1f1c2c, #928dab);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 

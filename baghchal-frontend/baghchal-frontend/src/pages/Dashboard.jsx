@@ -4,22 +4,50 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
     const navigate = useNavigate();
 
+    // Redirect if user not logged in
+    useEffect(() => {
+        const user = JSON.parse(localStorage.getItem("user"));
+        if (!user) {
+            navigate("/"); // redirect to login
+        }
+    }, [navigate]);
+
     const handleLogout = () => {
+        localStorage.removeItem("user"); // clear user data
         navigate("/");
     };
 
-    const startSinglePlayer = () => {
-        // Navigate to GameBoard page
-        navigate("/gameboard");
+    const startSinglePlayer = async () => {
+        const user = JSON.parse(localStorage.getItem("user"));
+        if (!user) return alert("User not logged in");
+
+        try {
+            const response = await fetch("http://localhost:8000/api/games/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ player: user.id }), // send user ID
+            });
+
+            const gameData = await response.json();
+            if (!response.ok) {
+                return alert(gameData.error || "Error creating game");
+            }
+
+            // Navigate to gameboard with game ID
+            navigate(`/gameboard/${gameData.id}`);
+        } catch (err) {
+            console.error(err);
+            alert("Network error. Try again.");
+        }
     };
 
     const startProfile = () => {
-        // Navigate to profile page
         navigate("/profile");
     };
 
     const openRules = () => {
-        // Navigate to Rules page
         navigate("/rules");
     };
 
@@ -34,6 +62,8 @@ const Dashboard = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const user = JSON.parse(localStorage.getItem("user"));
+
     return (
         <div className="dashboard-page">
             {/* Floating particles */}
@@ -45,7 +75,9 @@ const Dashboard = () => {
 
             {/* Glass Card */}
             <div className="dashboard-card">
-                <h1 className="dashboard-title">Welcome to Bagh-Chal 🐯🐐</h1>
+                <h1 className="dashboard-title">
+                    Welcome {user?.username} to Bagh-Chal 🐯🐐
+                </h1>
                 <p className="dashboard-subtitle">
                     Choose a mode and start your game
                 </p>
@@ -69,7 +101,7 @@ const Dashboard = () => {
                 </button>
             </div>
 
-            <style jsx>{`
+            <style>{`
         html,
         body,
         #root {
