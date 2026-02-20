@@ -1,13 +1,20 @@
 # 📌 Bagh-Chal Game Frontend
 
-The Bagh-Chal Game Frontend is the client-side application of a Database Management System (DBMS) project based on the traditional Nepali board game **Bagh-Chal**.  
-It provides an interactive interface for users to register, log in, start a game, make moves, and view game progress.
+The **Bagh-Chal Game Frontend** is the client-side application of a Database Management System (DBMS) project based on the traditional Nepali board game **Bagh-Chal**.  
 
-The frontend communicates with a Django backend through **REST APIs**.  
-All game data is stored and managed in a **PostgreSQL** database via the backend using SQL-based operations.
+It is built using **React** for creating interactive user interfaces, and **Tailwind CSS** for styling, ensuring a modern, responsive, and visually appealing design.  
 
-This project is developed for academic purposes to demonstrate frontend–backend–database integration.
+The frontend provides an interactive experience where users can:
+- Register and log in
+- Start a new game
+- Make tiger and goat moves
+- View the move history and game progress
 
+State management is handled using **React Hooks**, and API communication with the backend is done via **Fetch API** or **Axios**.  
+
+This project is developed for academic purposes to demonstrate **frontend–backend–database integration** using modern web technologies.
+
+---
 ---
 
 ## 🎯 Key Features
