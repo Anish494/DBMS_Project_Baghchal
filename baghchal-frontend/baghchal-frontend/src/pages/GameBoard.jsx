@@ -48,40 +48,50 @@ const GameBoard = () => {
   const AI_DEPTH = 3;
 
   // --- Backend API helpers ---
-  const saveMoveBackend = async (prevPos, newPos, piece, isCapture = false) => {
-    if (!gameId) return;
-    await fetch(`http://localhost:8000/api/games/${gameId}/moves/`, {
+const saveMoveBackend = async (prevPos, newPos, piece, isCapture = false) => {
+  if (!gameId) {
+    console.warn("No gameId found");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:8000/api/moves/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        game:gameId,
-        piece,
+        game: gameId,   // IMPORTANT
+        piece: piece,
         from_position: prevPos ? `${prevPos[0]}-${prevPos[1]}` : null,
         to_position: `${newPos[0]}-${newPos[1]}`,
         is_capture: isCapture
       })
     });
-  };
 
-  const undoMoveBackend = async () => {
-    if (!gameId) return;
-    await fetch(`http://localhost:8000/api/games/${gameId}/moves/undo/`, { method: "POST" });
-  };
+    const data = await response.json();
+    console.log("Move saved:", data);
 
-  // --- Auth & Animated Background ---
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (!user) navigate("/");
-  }, [navigate]);
+  } catch (error) {
+    console.error("Error saving move:", error);
+  }
+};
 
-  useEffect(() => {
-    let angle = 0;
-    const interval = setInterval(() => {
-      angle += 1;
-      document.documentElement.style.setProperty("--bg-angle", `${angle}deg`);
-    }, 50);
-    return () => clearInterval(interval);
-  }, []);
+
+const undoMoveBackend = async () => {
+  if (!gameId) return;
+
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/games/${gameId}/moves/undo/`,
+      { method: "POST" }
+    );
+
+    const data = await response.json();
+    console.log("Undo response:", data);
+
+  } catch (error) {
+    console.error("Undo error:", error);
+  }
+};
 
   // --- Utility functions ---
   const nextTurn = (turn) => (turn === "goat" ? "tiger" : "goat");
