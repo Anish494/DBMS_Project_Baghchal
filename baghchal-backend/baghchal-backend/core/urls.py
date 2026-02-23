@@ -4,7 +4,7 @@ from .views import (
     GameListCreateAPIView, GameRetrieveAPIView,
     GameMoveCreateAPIView, GameMoveRetrieveAPIView,
     GameMoveListAPIView, GameMoveUndoAPIView, GameMovesClearAPIView,  
-    UserStatisticsListCreateAPIView, UserStatisticsRetrieveAPIView, LoginAPIView
+    UserStatisticsListCreateAPIView, UserStatisticsRetrieveAPIView, LoginAPIView, EndGameAPIView
 )
 
 
@@ -22,6 +22,8 @@ urlpatterns = [
     path("games/<int:game_id>/moves/", GameMoveListAPIView.as_view()),
     path("games/<int:game_id>/moves/undo/", GameMoveUndoAPIView.as_view()),
     path("games/<int:game_id>/moves/clear/", GameMovesClearAPIView.as_view()),
+    path("games/<int:game_id>/end/", EndGameAPIView.as_view(), name="end-game"),
+
 
 
 

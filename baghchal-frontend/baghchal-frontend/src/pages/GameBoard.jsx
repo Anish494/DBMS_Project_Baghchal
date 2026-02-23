@@ -118,10 +118,65 @@ const undoMoveBackend = async () => {
     return true;
   };
 
-  const handleWinCheck = (st) => {
-    if (st.captured >= 5) setWinner("Tiger");
-    else if (areAllTigersBlocked(st)) setWinner("Goat");
-  };
+
+
+
+  useEffect(() => {
+  if (winner && gameId) {
+    const goatsKilled = state.captured;
+    fetch(`http://localhost:8000/api/games/${gameId}/end/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        winner: winner.toLowerCase(),
+        goats_killed: goatsKilled,
+        ended_at: new Date().toISOString()
+      })
+    })
+      .then(res => res.json())
+      .then(data => console.log("Game ended:", data))
+      .catch(err => console.error("Error updating winner:", err));
+  }
+}, [winner]);
+
+
+
+
+
+
+
+const handleWinCheck = (st) => {
+  if (st.captured >= 5) setWinner("Tiger");
+  else if (areAllTigersBlocked(st)) setWinner("Goat");
+};
+
+
+  const updateWinnerBackend = async (winnerName, goatsKilled) => {
+  if (!gameId) return;
+
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/games/${gameId}/`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          winner: winnerName.toLowerCase(),
+          goats_killed: goatsKilled,
+          ended_at: new Date().toISOString()
+        })
+      }
+    );
+
+    const data = await response.json();
+    console.log("Game updated:", data);
+  } catch (error) {
+    console.error("Error updating winner:", error);
+  }
+};
+
+
+
 
   // --- Move Simulation & AI ---
   const getAllMoves = (st, player) => {
