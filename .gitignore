@@ -1,0 +1,24 @@
+# Virtual environment
+baghchal-backend/myenv/
+myenv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables
+.env
+
+# Django
+*.log
+db.sqlite3
+staticfiles/
+media/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

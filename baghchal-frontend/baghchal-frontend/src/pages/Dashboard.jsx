@@ -4,16 +4,16 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
     const navigate = useNavigate();
 
-    // Redirect if user not logged in
+    
     useEffect(() => {
         const user = JSON.parse(localStorage.getItem("user"));
         if (!user) {
-            navigate("/"); // redirect to login
+            navigate("/"); 
         }
     }, [navigate]);
 
     const handleLogout = () => {
-        localStorage.removeItem("user"); // clear user data
+        localStorage.removeItem("user"); 
         navigate("/");
     };
 
@@ -51,7 +51,7 @@ const Dashboard = () => {
         navigate("/rules");
     };
 
-    // Animated gradient background
+    
     useEffect(() => {
         let angle = 0;
         const interval = setInterval(() => {
