@@ -1,82 +1,166 @@
+# core/views.py
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, permissions
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from django.contrib.auth import authenticate, get_user_model
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Min, F, ExpressionWrapper, DurationField
 
-from .models import User, Game, GameMove, UserStatistics
+from .models import Game, GameMove, UserStatistics
 from .serializers import (
     UserSerializer,
+    RegisterSerializer,
+    LoginSerializer,
     GameSerializer,
     GameMoveSerializer,
     UserStatisticsSerializer,
-    LoginSerializer
 )
+
+User = get_user_model()
+
+
+# --------------------------------
+# AUTH APIs
+# --------------------------------
+
+class RegisterAPIView(APIView):
+    permission_classes = [permissions.AllowAny]  # anyone can register
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Issue JWT tokens immediately after registration
+        # so user doesn't have to log in separately
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+            },
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        }, status=status.HTTP_201_CREATED)
+
+
+class LoginAPIView(APIView):
+    permission_classes = [permissions.AllowAny]  # anyone can log in
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+
+        # authenticate() does two things:
+        # 1. finds user by email (because USERNAME_FIELD = 'email')
+        # 2. calls user.check_password(password) — hashes and compares
+        # returns None if either is wrong
+        user = authenticate(request, username=email, password=password)
+
+        if user is None:
+            # Don't say "wrong password" vs "email not found"
+            # That helps attackers enumerate valid emails
+            return Response(
+                {'error': 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if not user.is_active:
+            return Response(
+                {'error': 'Account is disabled'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'role': user.role,
+            },
+            'access': str(refresh.access_token),   # short lived (15 min)
+            'refresh': str(refresh),                # long lived (7 days)
+        })
+
+
+class LogoutAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+
+        if not refresh_token:
+            return Response(
+                {'error': 'Refresh token is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            # Blacklist the refresh token
+            # This is why we added rest_framework_simplejwt.token_blacklist
+            # to INSTALLED_APPS — it stores invalidated tokens here
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            return Response(
+                {'error': 'Invalid or expired token'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({'message': 'Logged out successfully'})
+
+
+class ProfileAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # request.user is automatically populated by JWTAuthentication
+        # it decodes the Bearer token and fetches the user
+        user = request.user
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'date_joined': user.date_joined,
+        })
+
 
 # --------------------------------
 # USER APIs
 # --------------------------------
 
 class UserListCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        users = User.objects.all().values("id", "username", "email", "role")
+        users = User.objects.all().values('id', 'username', 'email', 'role')
         return Response(list(users))
-
-    def post(self, request):
-        serializer = UserSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return Response({
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role
-        }, status=201)
 
 
 class UserRetrieveAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         user = get_object_or_404(User, pk=pk)
         return Response({
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role
-        })
-
-
-# --------------------------------
-# LOGIN
-# --------------------------------
-
-class LoginAPIView(APIView):
-
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        username = serializer.validated_data["username"]
-        password = serializer.validated_data["password"]
-
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            return Response({"error": "User does not exist"}, status=404)
-
-        if user.password != password:
-            return Response({"error": "Invalid password"}, status=401)
-
-        return Response({
-            "success": True,
-            "message": "Login successful",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "role": user.role
-            }
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
         })
 
 
@@ -85,49 +169,51 @@ class LoginAPIView(APIView):
 # --------------------------------
 
 class GameListCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        user_id = request.data.get("player")
-        user = get_object_or_404(User, id=user_id)
-
-        game = Game.objects.create(player=user)
+        # Use the logged-in user directly from the JWT
+        # No need to pass player_id in request body
+        game = Game.objects.create(player=request.user)
 
         return Response({
-            "id": game.id,
-            "player": game.player.username,
-            "started_at": game.started_at
+            'id': game.id,
+            'player': game.player.username,
+            'started_at': game.started_at,
         })
 
 
 class UserGameListAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, user_id):
-        games = Game.objects.filter(player_id=user_id).order_by("-started_at")
+        games = Game.objects.filter(player_id=user_id).order_by('-started_at')
 
         data = [{
-            "id": g.id,
-            "player": g.player.username,
-            "winner": g.winner,
-            "goats_killed": g.goats_killed,
-            "started_at": g.started_at,
-            "ended_at": g.ended_at
+            'id': g.id,
+            'player': g.player.username,
+            'winner': g.winner,
+            'goats_killed': g.goats_killed,
+            'started_at': g.started_at,
+            'ended_at': g.ended_at,
         } for g in games]
 
         return Response(data)
 
 
 class GameRetrieveAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         game = get_object_or_404(Game, pk=pk)
 
         return Response({
-            "id": game.id,
-            "player": game.player.username,
-            "winner": game.winner,
-            "goats_killed": game.goats_killed,
-            "started_at": game.started_at,
-            "ended_at": game.ended_at
+            'id': game.id,
+            'player': game.player.username,
+            'winner': game.winner,
+            'goats_killed': game.goats_killed,
+            'started_at': game.started_at,
+            'ended_at': game.ended_at,
         })
 
 
@@ -136,17 +222,18 @@ class GameRetrieveAPIView(APIView):
 # --------------------------------
 
 class GameMoveCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        game_id = request.data.get("game")
-        piece = request.data.get("piece")
-        from_pos = request.data.get("from_position")
-        to_pos = request.data.get("to_position")
-        is_capture = request.data.get("is_capture", False)
+        game_id = request.data.get('game')
+        piece = request.data.get('piece')
+        from_pos = request.data.get('from_position')
+        to_pos = request.data.get('to_position')
+        is_capture = request.data.get('is_capture', False)
 
         game = get_object_or_404(Game, id=game_id)
 
-        last_move = game.moves.order_by("-move_number").first()
+        last_move = game.moves.order_by('-move_number').first()
         move_number = last_move.move_number + 1 if last_move else 1
 
         move = GameMove.objects.create(
@@ -155,71 +242,72 @@ class GameMoveCreateAPIView(APIView):
             piece=piece,
             from_position=from_pos,
             to_position=to_pos,
-            is_capture=is_capture
+            is_capture=is_capture,
         )
 
         return Response({
-            "move_number": move.move_number,
-            "piece": move.piece,
-            "from_position": move.from_position,
-            "to_position": move.to_position
-        }, status=201)
+            'move_number': move.move_number,
+            'piece': move.piece,
+            'from_position': move.from_position,
+            'to_position': move.to_position,
+        }, status=status.HTTP_201_CREATED)
 
 
 class GameMoveRetrieveAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         move = get_object_or_404(GameMove, pk=pk)
 
         return Response({
-            "id": move.id,
-            "game": move.game.id,
-            "move_number": move.move_number,
-            "piece": move.piece,
-            "from_position": move.from_position,
-            "to_position": move.to_position,
-            "is_capture": move.is_capture
+            'id': move.id,
+            'game': move.game.id,
+            'move_number': move.move_number,
+            'piece': move.piece,
+            'from_position': move.from_position,
+            'to_position': move.to_position,
+            'is_capture': move.is_capture,
         })
 
 
 class GameMoveListAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, game_id):
         game = get_object_or_404(Game, id=game_id)
-        moves = game.moves.order_by("move_number")
+        moves = game.moves.order_by('move_number')
 
-        return Response([
-            {
-                "id": m.id,
-                "move_number": m.move_number,
-                "piece": m.piece,
-                "from_position": m.from_position,
-                "to_position": m.to_position,
-                "is_capture": m.is_capture
-            }
-            for m in moves
-        ])
+        return Response([{
+            'id': m.id,
+            'move_number': m.move_number,
+            'piece': m.piece,
+            'from_position': m.from_position,
+            'to_position': m.to_position,
+            'is_capture': m.is_capture,
+        } for m in moves])
 
 
 class GameMoveUndoAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, game_id):
         game = get_object_or_404(Game, id=game_id)
-        last_move = game.moves.order_by("-move_number").first()
+        last_move = game.moves.order_by('-move_number').first()
 
         if not last_move:
-            return Response({"error": "No moves to undo"}, status=400)
+            return Response({'error': 'No moves to undo'}, status=status.HTTP_400_BAD_REQUEST)
 
         last_move.delete()
-        return Response({"message": "Last move undone"})
+        return Response({'message': 'Last move undone'})
 
 
 class GameMovesClearAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, game_id):
         game = get_object_or_404(Game, id=game_id)
         game.moves.all().delete()
-        return Response({"message": "All moves cleared"})
+        return Response({'message': 'All moves cleared'})
 
 
 # --------------------------------
@@ -227,469 +315,90 @@ class GameMovesClearAPIView(APIView):
 # --------------------------------
 
 class UserStatisticsListCreateAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        stats = UserStatistics.objects.select_related("user").all()
+        # Compute stats live from Game table for every user
+        # Same approach as UserStatisticsRetrieveAPIView
+        # This way leaderboard is always accurate without
+        # needing to manually sync UserStatistics table
+        users = User.objects.all()
+        data = []
 
-        return Response([
-            {
-                "id": s.id,
-                "user": s.user.username,
-                "games_played": s.games_played,
-                "games_won": s.games_won,
-                "games_lost": s.games_lost,
-                "total_goats_killed": s.total_goats_killed
-            }
-            for s in stats
-        ])
+        for user in users:
+            games_played = Game.objects.filter(player=user).count()
+            games_won = Game.objects.filter(player=user, winner='goat').count()
+            games_lost = Game.objects.filter(player=user, winner='tiger').count()
+
+            data.append({
+                'id': user.id,
+                'user': user.username,
+                'games_played': games_played,
+                'games_won': games_won,
+                'games_lost': games_lost,
+            })
+
+        return Response(data)
 
     def post(self, request):
         serializer = UserStatisticsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response({"message": "Statistics created"}, status=201)
-
-
+        return Response({'message': 'Statistics created'}, status=status.HTTP_201_CREATED)
 class UserStatisticsRetrieveAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, pk):
         user = get_object_or_404(User, pk=pk)
 
         games_played = Game.objects.filter(player=user).count()
-        games_won = Game.objects.filter(player=user, winner="player").count()
+        games_won = Game.objects.filter(player=user, winner='goat').count()
         games_lost = games_played - games_won
 
         best = Game.objects.filter(
             player=user,
-            winner="player",
-            ended_at__isnull=False
+            winner='player',
+            ended_at__isnull=False,
         ).annotate(
             duration=ExpressionWrapper(
-                F("ended_at") - F("started_at"),
+                F('ended_at') - F('started_at'),
                 output_field=DurationField()
             )
-        ).aggregate(best_score=Min("duration"))
+        ).aggregate(best_score=Min('duration'))
 
-        best_score = best["best_score"].total_seconds() if best["best_score"] else 0
+        best_score = best['best_score'].total_seconds() if best['best_score'] else 0
 
         return Response({
-            "username": user.username,
-            "email": user.email,
-            "games_played": games_played,
-            "games_won": games_won,
-            "games_lost": games_lost,
-            "best_score": best_score
+            'username': user.username,
+            'email': user.email,
+            'games_played': games_played,
+            'games_won': games_won,
+            'games_lost': games_lost,
+            'best_score': best_score,
         })
 
 
+# --------------------------------
+# END GAME API
+# --------------------------------
+
 class EndGameAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, game_id):
-        winner = request.data.get("winner")
-        goats_killed = request.data.get("goats_killed", 0)
+        winner = request.data.get('winner')
+        goats_killed = request.data.get('goats_killed', 0)
 
         game = get_object_or_404(Game, id=game_id)
-
         game.winner = winner
         game.goats_killed = goats_killed
         game.ended_at = timezone.now()
         game.save()
 
         return Response({
-            "id": game.id,
-            "winner": game.winner,
-            "goats_killed": game.goats_killed
+            'id': game.id,
+            'winner': game.winner,
+            'goats_killed': game.goats_killed,
         })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework import status
-# from django.utils import timezone
-# from django.db import connection
-
-# from .serializers import UserSerializer, GameSerializer, GameMoveSerializer, UserStatisticsSerializer, LoginSerializer
-
-# class UserListCreateAPIView(APIView):
-#     def get(self, request):
-#         with connection.cursor() as cursor:
-#             cursor.execute("SELECT id, username, email, role FROM users")
-#             rows = cursor.fetchall()
-
-#         users = [
-#             {"id": r[0], "username": r[1], "email": r[2], "role": r[3]}
-#             for r in rows
-#         ]
-#         return Response(users)
-
-#     def post(self, request):
-#         serializer = UserSerializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         data = serializer.validated_data
-#         with connection.cursor() as cursor:
-#             cursor.execute(
-#                 "INSERT INTO users (username, email, password, role, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id, username, email, role",
-#                 [data["username"], data["email"], data["password"], data.get("role", "player"), timezone.now()]
-#             )
-#             user = cursor.fetchone()
-
-#         return Response({
-#             "id": user[0],
-#             "username": user[1],
-#             "email": user[2],
-#             "role": user[3]
-#         }, status=201)
-
-
-# class UserRetrieveAPIView(APIView):
-#     def get(self, request, pk):
-#         with connection.cursor() as cursor:
-#             cursor.execute(
-#                 "SELECT id, username, email, role FROM users WHERE id = %s",
-#                 [pk]
-#             )
-#             user = cursor.fetchone()
-#             if not user:
-#                 return Response({"error": "User not found"}, status=404)
-
-#         return Response({
-#             "id": user[0],
-#             "username": user[1],
-#             "email": user[2],
-#             "role": user[3]
-#         })
-
-
-
-# class LoginAPIView(APIView):
-#     def post(self, request):
-#         serializer = LoginSerializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         username = serializer.validated_data["username"]
-#         password = serializer.validated_data["password"]
-
-#         with connection.cursor() as cursor:
-#             cursor.execute(
-#                 "SELECT id, username, password, role FROM users WHERE username = %s",
-#                 [username]
-#             )
-#             row = cursor.fetchone()
-
-#         if not row:
-#             return Response({"error": "User does not exist"}, status=404)
-
-#         user_id, db_username, db_password, role = row
-#         if db_password != password:
-#             return Response({"error": "Invalid password"}, status=401)
-
-#         return Response({
-#             "success": True,
-#             "message": "Login successful",
-#             "user": {
-#                 "id": user_id,
-#                 "username": db_username,
-#                 "role": role
-#             }
-#         })
-
-
-
-# class GameListCreateAPIView(APIView):
-#     def post(self, request):
-#         user_id = request.data.get("player")
-#         with connection.cursor() as cursor:
-#             cursor.execute("SELECT id, username FROM users WHERE id = %s", [user_id])
-#             user = cursor.fetchone()
-#             if not user:
-#                 return Response({"error": "User not found"}, status=404)
-
-#             cursor.execute(
-#                 "INSERT INTO game (player_id, started_at) VALUES (%s, %s) RETURNING id, started_at",
-#                 [user_id, timezone.now()]
-#             )
-#             game = cursor.fetchone()
-
-#         game_id, started_at = game
-#         return Response({
-#             "id": game_id,
-#             "player": user[1],
-#             "started_at": started_at
-#         })
-
-
-# class UserGameListAPIView(APIView):
-#     def get(self, request, user_id):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT g.id, u.username, g.winner, g.goats_killed, g.started_at, g.ended_at
-#                 FROM game g
-#                 JOIN users u ON g.player_id = u.id
-#                 WHERE u.id = %s
-#                 ORDER BY g.started_at DESC
-#             """, [user_id])
-#             rows = cursor.fetchall()
-
-#         games = [
-#             {
-#                 "id": r[0],
-#                 "player": r[1],
-#                 "winner": r[2],
-#                 "goats_killed": r[3],
-#                 "started_at": r[4],
-#                 "ended_at": r[5]
-#             }
-#             for r in rows
-#         ]
-#         return Response(games)
-
-
-# class GameRetrieveAPIView(APIView):
-#     def get(self, request, pk):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT g.id, u.username, g.winner, g.goats_killed, g.started_at, g.ended_at
-#                 FROM game g
-#                 JOIN users u ON g.player_id = u.id
-#                 WHERE g.id = %s
-#             """, [pk])
-#             row = cursor.fetchone()
-#             if not row:
-#                 return Response({"error": "Game not found"}, status=404)
-
-#         return Response({
-#             "id": row[0],
-#             "player": row[1],
-#             "winner": row[2],
-#             "goats_killed": row[3],
-#             "started_at": row[4],
-#             "ended_at": row[5]
-#         })
-
-
-# class GameMoveCreateAPIView(APIView):
-#     def post(self, request):
-#         game_id = request.data.get("game")
-#         piece = request.data.get("piece")
-#         from_pos = request.data.get("from_position")
-#         to_pos = request.data.get("to_position")
-#         is_capture = request.data.get("is_capture", False)
-
-#         with connection.cursor() as cursor:
-#             cursor.execute("SELECT id FROM game WHERE id = %s", [game_id])
-#             if not cursor.fetchone():
-#                 return Response({"error": "Game not found"}, status=404)
-
-#             cursor.execute("SELECT MAX(move_number) FROM game_move WHERE game_id = %s", [game_id])
-#             last = cursor.fetchone()[0]
-#             move_number = last + 1 if last else 1
-
-#             cursor.execute("""
-#                 INSERT INTO game_move (game_id, move_number, piece, from_position, to_position, is_capture, created_at)
-#                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-#             """, [game_id, move_number, piece, from_pos, to_pos, is_capture, timezone.now()])
-
-#         return Response({
-#             "move_number": move_number,
-#             "piece": piece,
-#             "from_position": from_pos,
-#             "to_position": to_pos
-#         }, status=201)
-
-
-# class GameMoveRetrieveAPIView(APIView):
-#     def get(self, request, pk):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT id, game_id, move_number, piece, from_position, to_position, is_capture
-#                 FROM game_move
-#                 WHERE id = %s
-#             """, [pk])
-#             row = cursor.fetchone()
-#             if not row:
-#                 return Response({"error": "Move not found"}, status=404)
-
-#         return Response({
-#             "id": row[0],
-#             "game": row[1],
-#             "move_number": row[2],
-#             "piece": row[3],
-#             "from_position": row[4],
-#             "to_position": row[5],
-#             "is_capture": row[6]
-#         })
-
-
-# class GameMoveListAPIView(APIView):
-#     def get(self, request, game_id):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT id, move_number, piece, from_position, to_position, is_capture
-#                 FROM game_move
-#                 WHERE game_id = %s
-#                 ORDER BY move_number
-#             """, [game_id])
-#             rows = cursor.fetchall()
-
-#         return Response([
-#             {
-#                 "id": r[0],
-#                 "move_number": r[1],
-#                 "piece": r[2],
-#                 "from_position": r[3],
-#                 "to_position": r[4],
-#                 "is_capture": r[5]
-#             }
-#             for r in rows
-#         ])
-
-
-# class GameMoveUndoAPIView(APIView):
-#     def post(self, request, game_id):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT id FROM game_move
-#                 WHERE game_id = %s
-#                 ORDER BY move_number DESC
-#                 LIMIT 1
-#             """, [game_id])
-#             last = cursor.fetchone()
-#             if not last:
-#                 return Response({"error": "No moves to undo"}, status=400)
-
-#             cursor.execute("DELETE FROM game_move WHERE id = %s", [last[0]])
-
-#         return Response({"message": "Last move undone"})
-
-
-# class GameMovesClearAPIView(APIView):
-#     def post(self, request, game_id):
-#         with connection.cursor() as cursor:
-#             cursor.execute("DELETE FROM game_move WHERE game_id = %s", [game_id])
-#         return Response({"message": "All moves cleared"})
-
-
-
-# class UserStatisticsListCreateAPIView(APIView):
-#     def get(self, request):
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 SELECT s.id, u.username, s.games_played, s.games_won, s.games_lost, s.total_goats_killed
-#                 FROM user_statistics s
-#                 JOIN users u ON s.user_id = u.id
-#             """)
-#             rows = cursor.fetchall()
-
-#         stats = [
-#             {
-#                 "id": r[0],
-#                 "user": r[1],
-#                 "games_played": r[2],
-#                 "games_won": r[3],
-#                 "games_lost": r[4],
-#                 "total_goats_killed": r[5]
-#             }
-#             for r in rows
-#         ]
-#         return Response(stats)
-
-#     def post(self, request):
-#         data = request.data
-#         with connection.cursor() as cursor:
-#             cursor.execute("""
-#                 INSERT INTO user_statistics (user_id, games_played, games_won, games_lost, total_goats_killed)
-#                 VALUES (%s, %s, %s, %s, %s)
-#             """, [
-#                 data.get("user_id"),
-#                 data.get("games_played", 0),
-#                 data.get("games_won", 0),
-#                 data.get("games_lost", 0),
-#                 data.get("total_goats_killed", 0)
-#             ])
-#         return Response({"message": "Statistics created"}, status=201)
-
-
-# class UserStatisticsRetrieveAPIView(APIView):
-#     def get(self, request, pk):
-#         with connection.cursor() as cursor:
-#             cursor.execute("SELECT username, email FROM users WHERE id = %s", [pk])
-#             user = cursor.fetchone()
-#             if not user:
-#                 return Response({"error": "User not found"}, status=404)
-
-#             username, email = user
-
-#             cursor.execute("SELECT COUNT(*) FROM game WHERE player_id = %s", [pk])
-#             games_played = cursor.fetchone()[0]
-
-#             cursor.execute("SELECT COUNT(*) FROM game WHERE player_id = %s AND winner = 'player'", [pk])
-#             games_won = cursor.fetchone()[0]
-
-#             games_lost = games_played - games_won
-
-#             cursor.execute("""
-#                 SELECT MIN(EXTRACT(EPOCH FROM ended_at - started_at))
-#                 FROM game
-#                 WHERE player_id = %s
-#                 AND winner = 'player'
-#                 AND ended_at IS NOT NULL
-#             """, [pk])
-#             best = cursor.fetchone()[0]
-#             best_score = float(best) if best else 0
-
-#         return Response({
-#             "username": username,
-#             "email": email,
-#             "games_played": games_played,
-#             "games_won": games_won,
-#             "games_lost": games_lost,
-#             "best_score": best_score
-#         })
-
-
-# class EndGameAPIView(APIView):
-#     def patch(self, request, game_id):
-#         winner = request.data.get("winner")
-#         goats_killed = request.data.get("goats_killed", 0)
-
-#         with connection.cursor() as cursor:
-#             cursor.execute("SELECT player_id FROM game WHERE id = %s", [game_id])
-#             game = cursor.fetchone()
-#             if not game:
-#                 return Response({"error": "Game not found"}, status=404)
-
-#             cursor.execute("""
-#                 UPDATE game
-#                 SET winner = %s, goats_killed = %s, ended_at = %s
-#                 WHERE id = %s
-#             """, [winner, goats_killed, timezone.now(), game_id])
-
-#         return Response({
-#             "id": game_id,
-#             "winner": winner,
-#             "goats_killed": goats_killed
-#         })
 
 
