@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import CustomAlert from "../Components/CustomAlert";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { API_URL } from "../config";
+
+import { auth, googleProvider } from "../firebase";
+import { signInWithPopup } from "firebase/auth";
+
+
 
 const Register = () => {
   const navigate = useNavigate();
@@ -137,7 +143,7 @@ const Register = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/api/auth/register/", {
+      const response = await fetch(`${API_URL}/api/auth/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -184,9 +190,45 @@ const Register = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:8000/accounts/google/login/";
+  const handleGoogleLogin = async () => {
+    try {
+      // Step 1 — Open Google popup via Firebase
+      // This handles the entire Google OAuth flow
+      const result = await signInWithPopup(auth, googleProvider);
+
+      // Step 2 — Get the Firebase ID token
+      // This token proves the user authenticated with Google
+      const firebaseToken = await result.user.getIdToken();
+
+      // Step 3 — Send token to Django
+      // Django verifies it and returns our normal JWT
+      const res = await fetch(`${API_URL}/api/auth/firebase/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firebase_token: firebaseToken }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Google login failed.");
+        return;
+      }
+
+      // Step 4 — Store tokens exactly like normal login
+      localStorage.setItem("access_token", data.access);
+      localStorage.setItem("refresh_token", data.refresh);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Step 5 — Navigate to dashboard
+      navigate("/dashboard");
+
+    } catch (err) {
+      console.error("Google login error:", err);
+      setError("Google login failed. Try again.");
+    }
   };
+
 
   const inputStyle = (fieldName) => ({
     width: "100%",
@@ -205,7 +247,7 @@ const Register = () => {
 
   return (
     <div>
-<Navbar/>
+      <Navbar />
       <div style={{ position: "relative", width: "100%", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", fontFamily: "'Georgia', 'Times New Roman', serif" }}>
 
         <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, zIndex: 0 }} />
@@ -249,37 +291,30 @@ const Register = () => {
             onClick={handleGoogleLogin}
             style={{
               width: "100%",
-              padding: "13px 20px",
+              padding: "13px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(200,150,50,0.2)",
+              borderRadius: 12,
+              color: "rgba(200,180,140,0.8)",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 12,
-              background: "rgba(255, 255, 255, 0.05)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: 12,
-              cursor: "pointer",
-              color: "#e8dcc8",
-              fontSize: 14,
-              fontWeight: 600,
-              letterSpacing: 0.3,
-              marginBottom: 24,
-              fontFamily: "inherit",
+              gap: 10,
+              transition: "background 0.2s ease",
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
-              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.22)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
-              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)";
-            }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.09)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
           >
-            <svg width="18" height="18" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.1-4z" />
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
-              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.4 35.5 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-8H6.3C9.6 35.6 16.3 44 24 44z" />
-              <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.4-2.5 4.5-4.6 5.9l6.2 5.2C40.8 35.7 44 30.3 44 24c0-1.3-.1-2.7-.4-4z" />
-            </svg>
+            <img
+              src="https://www.google.com/favicon.ico"
+              width={18} height={18}
+              alt="Google"
+              style={{ borderRadius: 2 }}
+            />
             Continue with Google
           </button>
 

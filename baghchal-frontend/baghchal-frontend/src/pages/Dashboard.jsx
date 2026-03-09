@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
+import { API_URL } from "../config";
+
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -138,7 +140,7 @@ const Dashboard = () => {
         const refreshToken = localStorage.getItem("refresh_token");
 
         try {
-            await fetch("http://localhost:8000/api/auth/logout/", {
+            await fetch(`${API_URL}/api/auth/logout/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -168,7 +170,7 @@ const Dashboard = () => {
         if (!token) return navigate("/");
 
         try {
-            const response = await fetch("http://localhost:8000/api/games/", {
+            const response = await fetch(`${API_URL}/api/games/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -349,7 +351,7 @@ const Dashboard = () => {
 
                     <button
                         style={buttonStyle("secondary")}
-                        onClick={() => alert("Coming soon!")}
+                        onClick={() => navigate("/online")}
                         onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-1px)"}
                         onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
                     >

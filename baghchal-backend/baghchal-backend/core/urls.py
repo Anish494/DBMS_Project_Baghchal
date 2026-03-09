@@ -1,6 +1,7 @@
 # core/urls.py
 
 from django.urls import path
+from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     # auth
@@ -73,4 +74,13 @@ urlpatterns = [
     # --------------------------------
     path('statistics/', UserStatisticsListCreateAPIView.as_view(), name='stats-list'),
     path('statistics/<int:pk>/', UserStatisticsRetrieveAPIView.as_view(), name='stats-detail'),
+
+
+    # online game apis
+    path('online/rooms/', views.OnlineRoomListAPIView.as_view()),
+    path('online/create/', views.OnlineRoomCreateAPIView.as_view()),
+    path('online/join/<str:room_code>/', views.OnlineRoomJoinAPIView.as_view()),
+
+
+    path('auth/firebase/', views.FirebaseLoginAPIView.as_view()),
 ]

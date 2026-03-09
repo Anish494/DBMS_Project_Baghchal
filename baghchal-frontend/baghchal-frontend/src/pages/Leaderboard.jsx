@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { API_URL } from "../config";
 
 const Leaderboard = () => {
     const navigate = useNavigate();
@@ -82,7 +83,7 @@ const Leaderboard = () => {
 
         const fetchLeaderboard = async () => {
             try {
-                const res = await fetch("http://localhost:8000/api/statistics/", {
+                const res = await fetch(`${API_URL}/api/statistics/`, {
                     headers: { "Authorization": `Bearer ${token}` },
                 });
 

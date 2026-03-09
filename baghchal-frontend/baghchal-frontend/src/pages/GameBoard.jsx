@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { API_URL } from "../config";
+
+
 const ROWS = 5;
 const COLS = 5;
 const MAX_GOATS = 20;
@@ -131,7 +134,7 @@ const GameBoard = () => {
   const saveMoveBackend = async (prevPos, newPos, piece, isCapture = false) => {
     if (!gameId) return;
     try {
-      await fetch("http://localhost:8000/api/moves/", {
+      await fetch(`${API_URL}/api/moves/`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -148,7 +151,7 @@ const GameBoard = () => {
   const undoMoveBackend = async () => {
     if (!gameId) return;
     try {
-      await fetch(`http://localhost:8000/api/games/${gameId}/moves/undo/`, {
+      await fetch(`${API_URL}/api/games/${gameId}/moves/undo/`, {
         method: "POST",
         headers: getAuthHeaders(),
       });
@@ -157,7 +160,7 @@ const GameBoard = () => {
 
   useEffect(() => {
     if (winner && gameId) {
-      fetch(`http://localhost:8000/api/games/${gameId}/end/`, {
+      fetch(`${API_URL}/api/games/${gameId}/end/`, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify({

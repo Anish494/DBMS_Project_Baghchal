@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { API_URL } from "../config";
+
 
 const Profile = () => {
     const navigate = useNavigate();
@@ -80,10 +82,10 @@ const Profile = () => {
         const fetchData = async () => {
             try {
                 const [resUser, resStats] = await Promise.all([
-                    fetch(`http://localhost:8000/api/users/${user.id}/`, {
+                    fetch(`${API_URL}/api/users/${user.id}/`, {
                         headers: { "Authorization": `Bearer ${token}` },
                     }),
-                    fetch(`http://localhost:8000/api/statistics/${user.id}/`, {
+                    fetch(`${API_URL}/api/statistics/${user.id}/`, {
                         headers: { "Authorization": `Bearer ${token}` },
                     }),
                 ]);

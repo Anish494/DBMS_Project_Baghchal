@@ -12,6 +12,8 @@ import LocalGame from "./pages/LocalGame";
 import Rules from "./pages/Rules";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
+import OnlineLobby from "./pages/OnlineLobby";
+import OnlineGame from "./pages/OnlineGame";
 
 function App() {
   return (
@@ -28,7 +30,13 @@ function App() {
         <Route path="/local" element={<ProtectedRoute><LocalGame /></ProtectedRoute>} />
         <Route path="/rules" element={<ProtectedRoute><Rules /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard/></ProtectedRoute>} />
+        <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
+        <Route path="/online" element={
+          <ProtectedRoute><OnlineLobby /></ProtectedRoute>
+        } />
+        <Route path="/online/:roomCode" element={
+    <ProtectedRoute><OnlineGame /></ProtectedRoute>
+} />
       </Routes>
     </Router>
   );

@@ -36,8 +36,8 @@ class Game(models.Model):
     goats_killed = models.IntegerField(default=0)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    board_state = models.JSONField(null=True, blank=True)
 
-    
 # Add these fields to the Game model
     room_code = models.CharField(max_length=20, unique=True, null=True, blank=True)
     room_name = models.CharField(max_length=50, null=True, blank=True)

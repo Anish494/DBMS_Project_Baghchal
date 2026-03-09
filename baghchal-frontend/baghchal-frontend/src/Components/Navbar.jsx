@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { API_URL } from "../config";
+
 
 const Navbar = () => {
     const navigate = useNavigate();
@@ -24,7 +26,7 @@ const Navbar = () => {
 
     const handleLogout = async () => {
         try {
-            await fetch("http://localhost:8000/api/auth/logout/", {
+            await fetch(`${API_URL}/api/auth/logout/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
