@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import CustomAlert from "../Components/CustomAlert";
+import CustomAlert from "../components/CustomAlert";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { API_URL } from "../config";
