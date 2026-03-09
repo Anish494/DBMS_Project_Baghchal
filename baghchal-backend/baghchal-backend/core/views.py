@@ -509,9 +509,10 @@ import os
 
 # Initialize Firebase Admin SDK once when Django starts
 # It reads your service account JSON to verify tokens
-cred_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'firebase-service-account.json')
+import json
 if not firebase_admin._apps:
-    cred = credentials.Certificate(cred_path)
+    firebase_creds = json.loads(os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '{}'))
+    cred = credentials.Certificate(firebase_creds)
     firebase_admin.initialize_app(cred)
 
 
